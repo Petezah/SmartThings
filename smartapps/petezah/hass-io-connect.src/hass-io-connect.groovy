@@ -69,14 +69,19 @@ def initialize() {
 def addHassioDevices() {
 	def deviceInfos = getDevicesDiscoveredInfo()
 	def runSubscribe = false
-	selectedDevices.each { device ->
-    	def dni = device.entity_id
-		def d = getChildDevice(device.entity_id)
+	selectedDevices.each { dni ->
+		def d = getChildDevice(dni)
 		if(!d) {
-			def newDevice = deviceInfos.find { (it.entity_id) == device.entity_id }
+			def newDevice = deviceInfos.find { (it.entity_id) == dni }
 			log.trace "newDevice = $newDevice"
 			log.trace "dni = $dni"
-			d = addChildDevice("Petezah", "Hass.io Device", dni, newDevice?.value.hub, [label:"${newDevice?.value.name} Hass.io Device"])
+                    
+			d = addChildDevice(
+            	"Petezah", 
+                "Hass.io Device Presence", 
+                dni, 
+                null, //newDevice?.value.hub, 
+                [label:"${newDevice?.attributes.friendly_name} Hass.io Device"])
 			log.trace "created ${d.displayName} with id $dni"
 
 			//d.setModel(newPlayer?.value.model)
@@ -129,41 +134,46 @@ def hassioDiscovery()
 
 def parse(description) 
 {
+	//def body = description.body
 	log.trace "hassio parse got $description"
+//    log.trace "body was $body"
 }
 
-Map getDevicesDiscoveredInfo() {
-	state.devices = state.devices ?: [:]
+def getDevicesDiscoveredInfo() {
+	state.devices = state.devices ?: []
     return state.devices
 }
 
 Map getDevicesDiscovered() {
+	log.trace "get devices..."
     def devs = getDevicesDiscoveredInfo()
 	def map = [:]
 	devs.each {
-    	//log.trace it
+    	log.trace it
 		def value = "${it.attributes.friendly_name}"
 		def key = it.entity_id
 		map["${key}"] = value
 	}
+    log.trace "mapped devices... $map"
 	map
 }
 
-private discoverHassioDevices()
+void discoverHassioDevices()
 {
-    log.trace "Trying to discover devices"
+    log.trace "Trying to discover devices at $instanceIp:8123"
 	sendHubCommand(
     	new physicalgraph.device.HubAction(
         	"""GET /api/states HTTP/1.1\r\nHOST: $instanceIp:8123\r\n\r\n""", 
             physicalgraph.device.Protocol.LAN, 
-            "${instanceIp}:8123", 
+            null, //"${instanceIp}:8123", 
             [callback: calledBackHandler]))
 }
 
 void calledBackHandler(physicalgraph.device.HubResponse hubResponse) {
 	log.trace "hassio parse got $hubResponse"
     def body = hubResponse.json
+    def numFound = body.size()
+    log.trace "found $numFound devices"
     //log.trace "got devices: $body"
     state.devices = body
-    
 }
