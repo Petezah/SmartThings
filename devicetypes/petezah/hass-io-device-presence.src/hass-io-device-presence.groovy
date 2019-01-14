@@ -32,8 +32,11 @@ metadata {
 			state("present", labelIcon:"st.presence.tile.present", backgroundColor:"#00A0DC")
 			state("not present", labelIcon:"st.presence.tile.not-present", backgroundColor:"#ffffff")
 		}
+        standardTile("refresh", "device.button", width: 1, height: 1, decoration: "flat") {
+			state "default", label: "", backgroundColor: "#ffffff", action: "refresh", icon: "st.secondary.refresh"
+		}
 		main "presence"
-		details "presence"
+		details(["presence","refresh"])
 	}
 }
 
@@ -44,18 +47,30 @@ def installed() {
 def updated() {
 	unschedule()
 	runEvery5Minutes(refresh)
-	refresh()
+	device.refresh()
 }
 
 def refresh() {
     def instanceIp = "192.168.1.9"
     log.trace "Trying to get device state from $instanceIp"
-	sendHubCommand(
-    	new physicalgraph.device.HubAction(
-        	"""GET /api/states HTTP/1.1\r\nHOST: $instanceIp:8123\r\n\r\n""", 
-            physicalgraph.device.Protocol.LAN, 
-            "${instanceIp}:8123", 
-            [callback: calledBackHandler]))
+    log.trace "GET /api/states/${device.deviceNetworkId}"
+	def result = new physicalgraph.device.HubAction(
+        method: "GET",
+        path: "/api/states/${device.deviceNetworkId}",
+        headers: [
+            HOST: instanceIp
+        ]
+    )
+    log.trace result
+    return result
+    
+	//def action =
+    //	new physicalgraph.device.HubAction(
+    //		"""GET /api/states/${device.deviceNetworkId} HTTP/1.1\r\nHOST: $instanceIp:8123\r\n\r\n""", 
+    //        physicalgraph.device.Protocol.LAN)
+    //        //null, //"${instanceIp}:8123", 
+    //        //[callback: calledBackHandler])
+    //action
 }
 
 void calledBackHandler(physicalgraph.device.HubResponse hubResponse) {
@@ -66,7 +81,8 @@ void calledBackHandler(physicalgraph.device.HubResponse hubResponse) {
     
 }
 
-def parse(String description) {
+def parse(description) {
+	log.trace "parse got $description"
 	def name = parseName(description)
 	def value = parseValue(description)
 	def linkText = getLinkText(device)
