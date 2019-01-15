@@ -41,13 +41,14 @@ def installed() {
 def updated() {
 	log.debug "Updated with settings: ${settings}"
 
+	unschedule()
 	unsubscribe()
 	initialize()
 }
 
 def uninstalled() {
 	def devices = getChildDevices()
-	log.trace "deleting ${devices.size()} Sonos"
+	log.trace "deleting ${devices.size()} Hass.io Device(s)"
 	devices.each {
 		deleteChildDevice(it.deviceNetworkId)
 	}
@@ -59,11 +60,12 @@ def initialize() {
 	state.subscribe = false
 
 	unschedule()
-	//scheduleActions()
 
 	if (selectedDevices) {
 		addHassioDevices()
 	}
+    
+    runEvery5Minutes(refreshDevices)
 }
 
 def addHassioDevices() {
@@ -71,8 +73,8 @@ def addHassioDevices() {
 	def runSubscribe = false
 	selectedDevices.each { dni ->
 		def d = getChildDevice(dni)
+		def newDevice = deviceInfos.find { (it.entity_id) == dni }
 		if(!d) {
-			def newDevice = deviceInfos.find { (it.entity_id) == dni }
 			log.trace "newDevice = $newDevice"
 			log.trace "dni = $dni"
                     
@@ -81,7 +83,9 @@ def addHassioDevices() {
                 "Hass.io Device Presence", 
                 dni, 
                 null, //newDevice?.value.hub, 
-                [label:"${newDevice?.attributes.friendly_name} Hass.io Device"])
+                [
+                	label:"${newDevice?.attributes.friendly_name} Hass.io Device"
+                    ])
 			log.trace "created ${d.displayName} with id $dni"
 
 			//d.setModel(newPlayer?.value.model)
@@ -91,6 +95,9 @@ def addHassioDevices() {
 		} else {
 			log.trace "found ${d.displayName} with id $dni already exists"
 		}
+        
+        // Make sure state is up to date
+        refreshDevices()
 	}
 }
 
@@ -176,4 +183,42 @@ void calledBackHandler(physicalgraph.device.HubResponse hubResponse) {
     log.trace "found $numFound devices"
     //log.trace "got devices: $body"
     state.devices = body
+}
+
+def refreshDevices() {
+    log.trace "Trying to refresh devices at $instanceIp:8123"
+	sendHubCommand(
+    	new physicalgraph.device.HubAction(
+        	"""GET /api/states HTTP/1.1\r\nHOST: $instanceIp:8123\r\n\r\n""", 
+            physicalgraph.device.Protocol.LAN, 
+            null, //"${instanceIp}:8123", 
+            [callback: refreshCallbackHandler]))
+}
+
+void refreshCallbackHandler(physicalgraph.device.HubResponse hubResponse) {
+	log.trace "hassio refreshCallbackHandler got $hubResponse"
+    def body = hubResponse.json
+    def numFound = body.size()
+    log.trace "found $numFound devices"
+    //log.trace "got devices: $body"
+    state.devices = body
+    updateDeviceStates()
+}
+
+def updateDeviceStates() {
+	def states = getDevicesDiscoveredInfo()
+	def children = getChildDevices()
+    children.each { d ->
+    	def dni = d.getDeviceNetworkId()
+        def deviceState = states.find { (it.entity_id) == dni }
+        if (deviceState) {
+       		if (deviceState?.state == "home") {
+        		log.trace "setting ${d.displayName} to home"
+            	d.arrived()
+        	} else {
+            	log.trace "setting ${d.displayName} to not home"
+            	d.departed()
+        	}
+        }
+    }
 }
