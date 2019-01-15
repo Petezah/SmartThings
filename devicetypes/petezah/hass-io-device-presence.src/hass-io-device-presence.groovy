@@ -19,12 +19,13 @@ metadata {
 		capability "Presence Sensor"
 		capability "Sensor"
         
-        command "refresh"
+        command "arrived"
+        command "departed"
 	}
 
 	simulator {
-		status "present": "presence: 1"
-		status "not present": "presence: 0"
+		status "present": "presence: present"
+		status "not present": "presence: not present"
 	}
 
 	tiles {
@@ -32,107 +33,36 @@ metadata {
 			state("present", labelIcon:"st.presence.tile.present", backgroundColor:"#00A0DC")
 			state("not present", labelIcon:"st.presence.tile.not-present", backgroundColor:"#ffffff")
 		}
-        standardTile("refresh", "device.button", width: 1, height: 1, decoration: "flat") {
-			state "default", label: "", backgroundColor: "#ffffff", action: "refresh", icon: "st.secondary.refresh"
-		}
 		main "presence"
-		details(["presence","refresh"])
+		details "presence"
 	}
+}
+
+def parse(String description) {
+    def pair = description.split(":")
+    createEvent(name: pair[0].trim(), value: pair[1].trim())
 }
 
 def installed() {
-	updated()
+    initialize()
 }
 
 def updated() {
-	unschedule()
-	runEvery5Minutes(refresh)
-	device.refresh()
+    initialize()
 }
 
-def refresh() {
-    def instanceIp = "192.168.1.9"
-    log.trace "Trying to get device state from $instanceIp"
-    log.trace "GET /api/states/${device.deviceNetworkId}"
-	def result = new physicalgraph.device.HubAction(
-        method: "GET",
-        path: "/api/states/${device.deviceNetworkId}",
-        headers: [
-            HOST: instanceIp
-        ]
-    )
-    log.trace result
-    return result
-    
-	//def action =
-    //	new physicalgraph.device.HubAction(
-    //		"""GET /api/states/${device.deviceNetworkId} HTTP/1.1\r\nHOST: $instanceIp:8123\r\n\r\n""", 
-    //        physicalgraph.device.Protocol.LAN)
-    //        //null, //"${instanceIp}:8123", 
-    //        //[callback: calledBackHandler])
-    //action
+def initialize() {
+	// TODO?
 }
 
-void calledBackHandler(physicalgraph.device.HubResponse hubResponse) {
-	log.trace "hassio parse got $hubResponse"
-    def body = hubResponse.json
-    //log.trace "got devices: $body"
-    state.devices = body
-    
+// handle commands
+
+def arrived() {
+    log.trace "Executing 'arrived'"
+    sendEvent(name: "presence", value: "present")
 }
 
-def parse(description) {
-	log.trace "parse got $description"
-	def name = parseName(description)
-	def value = parseValue(description)
-	def linkText = getLinkText(device)
-	def descriptionText = parseDescriptionText(linkText, value, description)
-	def handlerName = getState(value)
-	def isStateChange = isStateChange(device, name, value)
-
-	def results = [
-    	translatable: true,
-		name: name,
-		value: value,
-		unit: null,
-		linkText: linkText,
-		descriptionText: descriptionText,
-		handlerName: handlerName,
-		isStateChange: isStateChange,
-		displayed: displayed(description, isStateChange)
-	]
-	log.debug "Parse returned $results.descriptionText"
-	return results
-
-}
-
-private String parseName(String description) {
-	if (description?.startsWith("presence: ")) {
-		return "presence"
-	}
-	null
-}
-
-private String parseValue(String description) {
-	switch(description) {
-		case "presence: 1": return "present"
-		case "presence: 0": return "not present"
-		default: return description
-	}
-}
-
-private parseDescriptionText(String linkText, String value, String description) {
-	switch(value) {
-		case "present": return "{{ linkText }} has arrived"
-		case "not present": return "{{ linkText }} has left"
-		default: return value
-	}
-}
-
-private getState(String value) {
-	switch(value) {
-		case "present": return "arrived"
-		case "not present": return "left"
-		default: return value
-	}
+def departed() {
+    log.trace "Executing 'departed'"
+    sendEvent(name: "presence", value: "not present")
 }
